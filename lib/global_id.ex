@@ -20,9 +20,11 @@ defmodule GlobalId do
     # First 10 bits represent node id. Next 46 bits represent epoch in milliseconds, 
     # which is sufficient for approximately 2231 years starting from 1970. Remaining
     # 8 bits represent a counter, which wraps at 255, allowing up to 256,000 requests
-    # per second. This will generate unique ids assuming that there is at least 1
-    # millisecond between last get_id before the restart and first get_id after the
-    # restart.
+    # per second. This will generate unique ids assuming:
+    #
+    # 1) there is at least 1 millisecond between last get_id before the restart and 
+    # first get_id after the restart;
+    # 2) epoch milliseconds is never moving backwards.
 
     <<
       node_id()::size(10),
