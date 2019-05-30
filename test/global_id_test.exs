@@ -1,5 +1,6 @@
 defmodule GlobalIdTest do
   use ExUnit.Case
+  use Bitwise
 
   setup do
     GlobalId.init()
@@ -7,11 +8,11 @@ defmodule GlobalIdTest do
 
   test "global_id_under_rate_limit" do
     ids =
-      0..1_000
+      0..10
       |> Enum.map(fn _ ->
-        Process.sleep(1)
+        Process.sleep(1 <<< 10)
 
-        0..255
+        0..((1 <<< 18) - 1)
         |> Enum.map(fn _ ->
           GlobalId.get_id()
         end)
@@ -27,11 +28,11 @@ defmodule GlobalIdTest do
 
   test "global_id_over_rate_limit" do
     ids =
-      0..1_000
+      0..10
       |> Enum.map(fn _ ->
-        Process.sleep(1)
+        Process.sleep(1 <<< 10)
 
-        0..256
+        0..(1 <<< 18)
         |> Enum.map(fn _ ->
           GlobalId.get_id()
         end)

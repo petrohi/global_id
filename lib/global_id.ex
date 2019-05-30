@@ -3,6 +3,8 @@ defmodule GlobalId do
   GlobalId module contains an implementation of a guaranteed globally unique id system.     
   """
 
+  use Bitwise
+
   @doc """
   64 bit non negative integer output   
   """
@@ -17,19 +19,17 @@ defmodule GlobalId do
   """
   @spec get_id_binary() :: binary
   def get_id_binary do
-    # First 10 bits represent node id. Next 46 bits represent epoch in milliseconds, 
-    # which is sufficient for approximately 2231 years starting from 1970. Remaining
-    # 8 bits represent a counter, which wraps at 255, allowing up to 256,000 requests
-    # per second. This will generate unique ids assuming:
-    #
-    # 1) there is at least 1 millisecond between last get_id before the restart and 
-    # first get_id after the restart;
-    # 2) epoch milliseconds is never moving backwards.
+    # First 10 bits represent node id. Next 36 bits represent monotonic timestamp
+    # with 2 ^ 10 = 1024 milliseconds resolution, which is sufficient for approximately
+    # 2231 years starting from 1970. Remaining 18 bits represent a counter. Assuming
+    # the maximum of 128,000 requests per second the maximum negative timestamp correction
+    # is 2 ^ 10 = 1024 milliseconds. There must be > 2 ^ 11 = 2048 milliseconds between
+    # the last get_id before the restart and the first get_id after the restart.
 
     <<
       node_id()::size(10),
-      timestamp()::size(46),
-      get_counter()::size(8)
+      timestamp(10) |> monotonic()::size(36),
+      get_counter(18)::size(18)
     >>
   end
 
@@ -51,21 +51,27 @@ defmodule GlobalId do
     :ok
   end
 
-  @spec get_counter() :: non_neg_integer
-  def get_counter do
-    # :ets.update_counter provides an efficient way to update one or more 
-    # counters, without the trouble of having to look up an object, update
-    # the object by incrementing an element, and insert the resulting object
-    # into the table again. The operation is guaranteed to be atomic and 
-    # isolated.
-
+  @spec get_counter(non_neg_integer) :: non_neg_integer
+  def get_counter(res) do
     :ets.update_counter(
       :counter,
       :counter,
       # increment by 1 at tuple position 2 and wrap to 0 after 255
-      {2, 1, 255, 0},
+      {2, 1, (1 <<< res) - 1, 0},
       # initial tuple
       {:counter, -1}
+    )
+  end
+
+  @spec monotonic(non_neg_integer) :: non_neg_integer
+  def monotonic(value) do
+    -:ets.update_counter(
+      :counter,
+      :monotonic,
+      # set if new > current (-current > -new)
+      {2, 0, -value, -value},
+      # initial tuple
+      {:monotonic, -value}
     )
   end
 
@@ -82,9 +88,9 @@ defmodule GlobalId do
   @doc """
   Returns timestamp since the epoch in milliseconds. 
   """
-  @spec timestamp() :: non_neg_integer
-  def timestamp do
+  @spec timestamp(non_neg_integer) :: non_neg_integer
+  def timestamp(res) do
     {mega_secs, secs, micro_secs} = :os.timestamp()
-    mega_secs * 1_000_000_000 + secs * 1_000 + trunc(micro_secs / 1_000)
+    (mega_secs * 1_000_000_000 + secs * 1_000 + trunc(micro_secs / 1_000)) >>> res
   end
 end
